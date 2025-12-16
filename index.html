@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧分帳助手 | Smart Split Bill</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#4F46E5', // Indigo 600
+                        secondary: '#10B981', // Emerald 500
+                        danger: '#EF4444', // Red 500
+                        background: '#F3F4F6', // Gray 100
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F3F4F6; }
+        .card-enter { animation: slideIn 0.3s ease-out forwards; }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Checkbox hidden but keeping accessibility */
+        .checkbox-wrapper input:checked + div {
+            background-color: #EEF2FF;
+            border-color: #4F46E5;
+            color: #4F46E5;
+        }
+        .checkbox-wrapper input:checked + div .check-icon {
+            opacity: 1;
+            transform: scale(1);
+        }
+    </style>
+</head>
+<body class="text-gray-800 pb-20">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-3xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <div class="bg-primary text-white p-2 rounded-lg">
+                    <i class="fa-solid fa-file-invoice-dollar text-xl"></i>
+                </div>
+                <h1 class="text-xl font-bold text-gray-900 tracking-tight">分帳助手</h1>
+            </div>
+            <button onclick="window.location.reload()" class="text-sm text-gray-500 hover:text-danger transition">
+                <i class="fa-solid fa-rotate-right mr-1"></i> 重置
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-3xl mx-auto px-4 mt-6 space-y-6">
+
+        <!-- 1. 參與者區塊 (Participants) -->
+        <section class="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">1</span>
+                    參與者
+                </h2>
+                <span class="text-xs text-gray-400" id="userCount">0 人</span>
+            </div>
+            
+            <div class="flex gap-2 mb-4">
+                <input type="text" id="newUserName" placeholder="輸入名字 (例如: Lip)" 
+                    class="flex-1 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 outline-none transition"
+                    onkeypress="handleUserEnter(event)">
+                <button onclick="addUser()" class="bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg text-sm px-5 py-2.5 transition shadow-sm active:scale-95">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+            </div>
+
+            <!-- User Chips -->
+            <div id="userList" class="flex flex-wrap gap-2 min-h-[40px]">
+                <!-- Example: <div class="bg-gray-100 px-3 py-1 rounded-full text-sm flex items-center gap-2">Lip <button class="text-gray-400 hover:text-danger">&times;</button></div> -->
+                <p class="text-gray-400 text-sm italic w-full text-center py-2">請先輸入參與活動的人員名單...</p>
+            </div>
+        </section>
+
+        <!-- 2. 記帳區塊 (Expenses) -->
+        <section class="bg-white rounded-2xl shadow-sm p-5 border border-gray-100 opacity-50 pointer-events-none transition-all duration-300" id="expenseSection">
+            <h2 class="text-lg font-bold flex items-center gap-2 mb-4">
+                <span class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">2</span>
+                新增消費
+            </h2>
+
+            <form id="expenseForm" class="space-y-4" onsubmit="event.preventDefault(); addExpense();">
+                <!-- Item & Price Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block mb-1 text-sm font-medium text-gray-700">項目名稱</label>
+                        <input type="text" id="itemTitle" placeholder="例如: 居酒屋晚餐" required
+                            class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5 outline-none">
+                    </div>
+                    <div>
+                        <label class="block mb-1 text-sm font-medium text-gray-700">金額 ($)</label>
+                        <input type="number" id="itemAmount" placeholder="0.00" step="0.01" min="0" required
+                            class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5 outline-none">
+                    </div>
+                </div>
+
+                <!-- Payer Selection -->
+                <div>
+                    <label class="block mb-1 text-sm font-medium text-gray-700">誰先付錢？ (Payer)</label>
+                    <select id="payerSelect" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5 outline-none">
+                        <!-- Options populated by JS -->
+                    </select>
+                </div>
+
+                <!-- Split Selection (Inclusion/Exclusion) -->
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-sm font-medium text-gray-700">分攤給誰？ (Involved)</label>
+                        <button type="button" onclick="toggleAllInvolved()" class="text-xs text-primary hover:underline">全選/取消</button>
+                    </div>
+                    <div id="involvedList" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        <!-- Checkboxes populated by JS -->
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">
+                        <i class="fa-solid fa-circle-info mr-1"></i>
+                        預設全選。若有人不需要付此項目，請取消勾選 (Exclude)。
+                    </p>
+                </div>
+
+                <button type="submit" class="w-full text-white bg-black hover:bg-gray-800 font-bold rounded-lg text-sm px-5 py-3 text-center transition shadow-lg active:scale-95 flex justify-center items-center gap-2">
+                    <i class="fa-solid fa-plus-circle"></i> 加入清單
+                </button>
+            </form>
+        </section>
+
+        <!-- History List -->
+        <section id="historySection" class="hidden">
+            <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 ml-1">消費明細</h3>
+            <div id="expenseList" class="space-y-3">
+                <!-- Expense Cards injected here -->
+            </div>
+        </section>
+
+        <!-- 3. 結算結果 (Settlement) -->
+        <section id="resultSection" class="bg-indigo-900 text-white rounded-2xl shadow-xl p-6 hidden card-enter">
+            <div class="flex items-center gap-3 mb-6 border-b border-indigo-700 pb-4">
+                <div class="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center text-white text-lg">
+                    <i class="fa-solid fa-hand-holding-dollar"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">智慧結算建議</h2>
+                    <p class="text-indigo-200 text-xs">Based on Debt Simplification Algorithm</p>
+                </div>
+            </div>
+
+            <!-- Total Stats -->
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-indigo-800 p-3 rounded-xl text-center">
+                    <p class="text-indigo-300 text-xs uppercase">總支出</p>
+                    <p class="text-xl font-bold" id="totalSpent">$0.00</p>
+                </div>
+                <div class="bg-indigo-800 p-3 rounded-xl text-center">
+                    <p class="text-indigo-300 text-xs uppercase">消費筆數</p>
+                    <p class="text-xl font-bold" id="totalTx">0</p>
+                </div>
+            </div>
+
+            <!-- Transfer Steps -->
+            <h3 class="text-sm font-semibold text-indigo-300 uppercase mb-3">最佳轉帳路徑</h3>
+            <div id="settlementSteps" class="space-y-3">
+                <!-- Steps injected here -->
+            </div>
+        </section>
+
+        <div class="h-10"></div>
+    </main>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // State
+        let users = []; // Array of strings
+        let expenses = []; // Array of objects
+        
+        // --- DOM Elements ---
+        const userListEl = document.getElementById('userList');
+        const userCountEl = document.getElementById('userCount');
+        const expenseSection = document.getElementById('expenseSection');
+        const payerSelect = document.getElementById('payerSelect');
+        const involvedListEl = document.getElementById('involvedList');
+        const expenseListEl = document.getElementById('expenseList');
+        const historySection = document.getElementById('historySection');
+        const resultSection = document.getElementById('resultSection');
+        const settlementStepsEl = document.getElementById('settlementSteps');
+
+        // --- 1. User Management ---
+
+        function handleUserEnter(e) {
+            if (e.key === 'Enter') addUser();
+        }
+
+        function addUser() {
+            const input = document.getElementById('newUserName');
+            const name = input.value.trim();
+            
+            if (!name) return;
+            if (users.includes(name)) {
+                alert('這個名字已經存在囉！');
+                return;
+            }
+
+            users.push(name);
+            input.value = '';
+            
+            renderUsers();
+            updateFormState();
+        }
+
+        function removeUser(name) {
+            // Check if user is involved in any expense
+            const isUsed = expenses.some(exp => exp.payer === name || exp.involved.includes(name));
+            if (isUsed) {
+                if(!confirm(`${name} 已經在消費紀錄中，刪除會連同相關消費紀錄一起移除。確定嗎？`)) return;
+                expenses = expenses.filter(exp => exp.payer !== name);
+                expenses.forEach(exp => {
+                    exp.involved = exp.involved.filter(u => u !== name);
+                });
+            }
+            
+            users = users.filter(u => u !== name);
+            renderUsers();
+            renderExpenses(); // Re-render in case expenses were removed
+            updateFormState();
+            calculateSettlement();
+        }
+
+        function renderUsers() {
+            userCountEl.innerText = `${users.length} 人`;
+            
+            if (users.length === 0) {
+                userListEl.innerHTML = '<p class="text-gray-400 text-sm italic w-full text-center py-2">請先輸入參與活動的人員名單...</p>';
+                return;
+            }
+
+            userListEl.innerHTML = users.map(user => `
+                <div class="bg-white border border-gray-200 shadow-sm px-3 py-1.5 rounded-full text-sm font-medium flex items-center gap-2 animate-pulse-once">
+                    <span class="w-2 h-2 rounded-full bg-green-400"></span>
+                    ${user}
+                    <button onclick="removeUser('${user}')" class="text-gray-400 hover:text-danger ml-1 focus:outline-none">
+                        <i class="fa-solid fa-times"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function updateFormState() {
+            // Enable expense section only if users exist
+            if (users.length > 0) {
+                expenseSection.classList.remove('opacity-50', 'pointer-events-none');
+                
+                // Update Payer Dropdown
+                const currentPayer = payerSelect.value;
+                payerSelect.innerHTML = users.map(u => `<option value="${u}">${u}</option>`).join('');
+                if (users.includes(currentPayer)) payerSelect.value = currentPayer;
+
+                // Update Involved Checkboxes (Preserve logic for new expenses: default checked)
+                // We re-render this completely to ensure new users appear
+                renderInvolvedCheckboxes();
+            } else {
+                expenseSection.classList.add('opacity-50', 'pointer-events-none');
+                resultSection.classList.add('hidden');
+            }
+        }
+
+        function renderInvolvedCheckboxes() {
+            involvedListEl.innerHTML = users.map(user => `
+                <label class="checkbox-wrapper cursor-pointer relative group">
+                    <input type="checkbox" name="involved" value="${user}" checked class="peer sr-only">
+                    <div class="border border-gray-200 rounded-lg p-2 flex items-center justify-between bg-white hover:bg-gray-50 transition-all peer-checked:border-primary peer-checked:bg-indigo-50 peer-checked:text-primary">
+                        <span class="text-sm font-medium truncate">${user}</span>
+                        <i class="fa-solid fa-check-circle text-lg text-primary opacity-0 transform scale-50 transition-all check-icon"></i>
+                    </div>
+                </label>
+            `).join('');
+        }
+
+        function toggleAllInvolved() {
+            const checkboxes = document.querySelectorAll('input[name="involved"]');
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => cb.checked = !allChecked);
+        }
+
+        // --- 2. Expense Management ---
+
+        function addExpense() {
+            const title = document.getElementById('itemTitle').value;
+            const amount = parseFloat(document.getElementById('itemAmount').value);
+            const payer = payerSelect.value;
+            
+            // Get involved users
+            const checkboxes = document.querySelectorAll('input[name="involved"]:checked');
+            const involved = Array.from(checkboxes).map(cb => cb.value);
+
+            if (!title || isNaN(amount) || amount <= 0) {
+                alert("請輸入正確的項目名稱與金額");
+                return;
+            }
+            if (involved.length === 0) {
+                alert("至少需要有一人分攤費用 (Involved)");
+                return;
+            }
+
+            const expense = {
+                id: Date.now(),
+                title,
+                amount,
+                payer,
+                involved
+            };
+
+            expenses.push(expense);
+            
+            // Reset form fields but keep payer
+            document.getElementById('itemTitle').value = '';
+            document.getElementById('itemAmount').value = '';
+            // Reset checkboxes to all checked for convenience
+            document.querySelectorAll('input[name="involved"]').forEach(cb => cb.checked = true);
+
+            renderExpenses();
+            calculateSettlement();
+        }
+
+        function deleteExpense(id) {
+            expenses = expenses.filter(e => e.id !== id);
+            renderExpenses();
+            calculateSettlement();
+        }
+
+        function renderExpenses() {
+            if (expenses.length === 0) {
+                historySection.classList.add('hidden');
+                return;
+            }
+            historySection.classList.remove('hidden');
+
+            // Sort by newest first
+            const sortedExpenses = [...expenses].reverse();
+
+            expenseListEl.innerHTML = sortedExpenses.map(exp => {
+                const isEveryone = exp.involved.length === users.length;
+                const involvedText = isEveryone ? "所有人" : `${exp.involved.length} 人 (${exp.involved.join(', ')})`;
+                
+                return `
+                <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex justify-between items-start group card-enter">
+                    <div>
+                        <div class="flex items-baseline gap-2">
+                            <h4 class="font-bold text-gray-800">${exp.title}</h4>
+                            <span class="text-xs text-gray-400">由 <span class="font-semibold text-gray-600">${exp.payer}</span> 支付</span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">
+                            <i class="fa-solid fa-users-viewfinder mr-1"></i> 分攤: ${involvedText}
+                        </p>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-bold text-lg text-gray-900">$${exp.amount.toFixed(2)}</div>
+                        <button onclick="deleteExpense(${exp.id})" class="text-xs text-red-400 hover:text-red-600 mt-1 opacity-0 group-hover:opacity-100 transition">
+                            <i class="fa-solid fa-trash"></i> 刪除
+                        </button>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        // --- 3. Algorithm: Minimize Cash Flow (Greedy) ---
+
+        function calculateSettlement() {
+            if (expenses.length === 0) {
+                resultSection.classList.add('hidden');
+                return;
+            }
+
+            resultSection.classList.remove('hidden');
+
+            // 1. Calculate Net Balances
+            // Using cents to avoid float errors
+            let balances = {}; 
+            users.forEach(u => balances[u] = 0);
+            let totalSpent = 0;
+
+            expenses.forEach(exp => {
+                const amount = Math.round(exp.amount * 100); // in cents
+                totalSpent += amount;
+                
+                // Payer gets + credit
+                if(balances[exp.payer] !== undefined) {
+                    balances[exp.payer] += amount;
+                }
+
+                // Involved people get - debit
+                const splitCount = exp.involved.length;
+                if (splitCount > 0) {
+                    const splitAmount = Math.floor(amount / splitCount);
+                    const remainder = amount % splitCount;
+
+                    exp.involved.forEach((user, index) => {
+                        // Distribute remainder cents to first few people to ensure sum matches exactly
+                        let pay = splitAmount + (index < remainder ? 1 : 0);
+                        if(balances[user] !== undefined) {
+                            balances[user] -= pay;
+                        }
+                    });
+                }
+            });
+
+            // Update Stats
+            document.getElementById('totalSpent').innerText = `$${(totalSpent / 100).toFixed(2)}`;
+            document.getElementById('totalTx').innerText = expenses.length;
+
+            // 2. Separate Debtors and Creditors
+            let debtors = [];
+            let creditors = [];
+
+            for (const [user, amount] of Object.entries(balances)) {
+                if (amount < -1) debtors.push({ user, amount }); // tolerance for floating point almost zero
+                if (amount > 1) creditors.push({ user, amount });
+            }
+
+            // 3. Greedy Match
+            let steps = [];
+            
+            // Sort by magnitude (optional but often produces cleaner results)
+            debtors.sort((a, b) => a.amount - b.amount); // Ascending (most negative first)
+            creditors.sort((a, b) => b.amount - a.amount); // Descending (most positive first)
+
+            let i = 0; // debtor index
+            let j = 0; // creditor index
+
+            while (i < debtors.length && j < creditors.length) {
+                let debtor = debtors[i];
+                let creditor = creditors[j];
+
+                // The amount to settle is the minimum of (abs(debt), credit)
+                let amount = Math.min(Math.abs(debtor.amount), creditor.amount);
+                
+                // Record Step
+                steps.push({
+                    from: debtor.user,
+                    to: creditor.user,
+                    amount: amount
+                });
+
+                // Update internal values
+                debtor.amount += amount;
+                creditor.amount -= amount;
+
+                // If settled, move pointer
+                if (Math.abs(debtor.amount) < 1) i++;
+                if (creditor.amount < 1) j++;
+            }
+
+            // Render Steps
+            if (steps.length === 0) {
+                settlementStepsEl.innerHTML = `
+                    <div class="bg-indigo-800/50 p-4 rounded-lg text-center text-indigo-200">
+                        <i class="fa-solid fa-check-circle text-2xl mb-2 text-green-400"></i>
+                        <p>帳目已平衡，無需轉帳！</p>
+                    </div>
+                `;
+            } else {
+                settlementStepsEl.innerHTML = steps.map(step => `
+                    <div class="bg-white text-gray-800 p-3 rounded-lg flex items-center justify-between shadow-sm transform hover:scale-[1.01] transition">
+                        <div class="flex items-center gap-3">
+                            <div class="font-bold text-red-500 w-16 truncate text-right">${step.from}</div>
+                            <div class="text-gray-300"><i class="fa-solid fa-arrow-right-long"></i></div>
+                            <div class="font-bold text-green-600 w-16 truncate">${step.to}</div>
+                        </div>
+                        <div class="font-bold text-lg text-indigo-900 bg-indigo-50 px-3 py-1 rounded-md">
+                            $${(step.amount / 100).toFixed(2)}
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+    </script>
+</body>
+</html>
